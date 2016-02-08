@@ -32,6 +32,6 @@ Functionality:
 
 You may Cut and Paste the <cla:Vin> element from the MitchellClaim.xml and put it below element <cla:ExteriorColor> to make the MitchellClaim.xml file match with MitchellClaim.xsd
 
-Or you may edit the MitchellClaim.xsd to make the <xs:element name="Vin"/> to be the top and required element for <VehicleDetails> replacing element <ModelYear>
+Or you may edit the MitchellClaim.xsd to make the <xs:element name="Vin"/> to be the top and required element for "VehicleDetails" replacing element "ModelYear"
 (The MitchellClaim.xsd file is located at Claim-REST/src/main/resources/ directory)
  
