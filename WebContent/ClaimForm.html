@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<script src="js/jquery-2.2.0.js"></script>
+<script src="js/insertClaim.js"></script>
+ 
+
+<title>Form Page</title>
+</head>
+<body>
+
+<h1>Create/Update Claim</h1>
+<form action="rest/claim/create" method="post" enctype="multipart/form-data">  
+<p>   Select Claim XML : <input type="file" name="file" size="50" accept=".xml"/>  
+    <input type="button" value="Submit Claim" id="createClaimBtn" />   
+ </p>
+</form>
+<div id="messages">  </div>
+
+<h1> Read Claim</h1>
+  <form id="read_claim"  name="read"  action="#">
+  <table>
+  <tr>
+  <td>Enter Parameter</td>
+  <td><input type="text" name="input_read" id="input_read" maxlength="50" value="ClaimantFirstName"></td>
+  <td>Parameter value</td>
+  <td><input type="text" name="read_value" id="read_value" maxlength="50" ></td>
+  <tr>
+  <td></td>
+	<td><input type="button" name="submit_read" id="submit_read" value="Submit"></td>
+</tr>
+  </table>
+  </form>  
+    <div id="read_message">  </div>
+    
+  <h1> Delete Claim</h1>
+  <form id="delete_claim"  name="delete_claim"  action="rest/claim/delete" method=post>
+  <table>
+  <tr>
+  <td>Claim Number</td>
+  <td><input type="text" name="claimNumber" id="claimNumber" maxlength="50"></td>
+  <td>Claimant FirstName</td>
+   <td><input type="text" name="claimantFirstName" id="claimantFirstName" maxlength="50"></td>
+   <tr>
+   <td></td>
+   <td><input type="submit" name="submit_delete" id="submit_delete" value="Submit"></td>
+   </tr>
+  </table>
+  </form>  
+    <div id="delete_message">  </div>
+    
+  <h1> Search Claim by LossDate</h1>
+  <form action="rest/claim/dateRange"method=post id="date_range"  name="date_range">
+  <table>
+  <tr>
+  <td>Enter Parameter</td>
+  <td><input type="datetime" name="start_date" id="start_date" maxlength="50" value="2014-00-00 00:00:00"></td>
+  <td>Parameter value</td>
+  <td><input type="datetime" name="end_date" id="end_date" maxlength="50" value="2015-00-00 00:00:00"></td>
+  <tr>
+  <td></td>
+  <td><input type="submit"  value="Submit"></td>
+   </tr>
+  </table>
+  </form>  
+  <div id="date_message">  </div>
+</body>
+</html>
