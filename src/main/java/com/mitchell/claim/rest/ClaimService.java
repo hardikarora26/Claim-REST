@@ -3,8 +3,6 @@ package com.mitchell.claim.rest;
 import java.io.*;
 import java.sql.*;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
@@ -23,10 +21,17 @@ import javax.ws.rs.core.Response;
 import javax.xml.XMLConstants;
 import javax.xml.bind.JAXB;
 import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBElement;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.util.JAXBSource;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.namespace.QName;
+import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
@@ -34,14 +39,16 @@ import javax.xml.validation.Validator;
 
 import org.xml.sax.SAXParseException;
 
+import sun.nio.cs.StandardCharsets;
+
 import com.mitchell.dao.ClaimServiceDB;
 import com.mitchell.jaxb.CauseOfLossCode;
 import com.mitchell.jaxb.LossInfoType;
-import com.mitchell.jaxb.Marshall;
 import com.mitchell.jaxb.MitchellClaimList;
 import com.mitchell.jaxb.MitchellClaimType;
 import com.mitchell.jaxb.StatusCode;
 import com.mitchell.jaxb.VehicleInfoType;
+import com.mitchell.utils.Utils;
 import com.sun.jersey.core.header.FormDataContentDisposition;
 import com.sun.jersey.multipart.FormDataParam;
 
@@ -64,12 +71,25 @@ public class ClaimService {
 		MitchellClaimType mct = null;
 		MitchellClaimList mcl = null;
 
+		InputStream in = fileInputStream;
+		StringBuilder sb=new StringBuilder();
+		BufferedReader br = new BufferedReader(new InputStreamReader(in));
+		String read;
+
+		while((read=br.readLine()) != null) {		   
+			sb.append(read);   
+		}
+		br.close();
+		read = sb.toString();
+		InputStream is = new ByteArrayInputStream(read.getBytes("UTF-8"));
+
 		//Validate input XML File
-		//   	if(!validateAgainstXSD(fileInputStream)){
-		//   	  return Response.status(415).entity("Invalid XML File").build();
-		//   	  }
+		if(!Utils.validateAgainstXSD(is)){
+			return Response.status(415).entity("Invalid XML File").build();
+		}
+		InputStream is2 = new ByteArrayInputStream(read.getBytes("UTF-8"));
 		mcl = new MitchellClaimList();
-		mcl.setMitchellClaimList(fileInputStream);
+		mcl.setMitchellClaimList(is2);
 
 		mct = mcl.getLastMitchellClaimType();
 
@@ -122,7 +142,7 @@ public class ClaimService {
 			else{
 				updateStmt.setString(3, mct.getStatus().toString());
 			}
-			updateStmt.setTimestamp(4, toTimeStamp(mct.getLossDate()));		
+			updateStmt.setTimestamp(4, Utils.toTimeStamp(mct.getLossDate()));		
 			updateStmt.executeUpdate();
 			updateStmt.close();
 			return "Update Succesful";
@@ -148,14 +168,14 @@ public class ClaimService {
 			conn = ClaimServiceDB.claimServiceDS().getConnection();
 			dateRange = conn.prepareStatement
 					("SELECT * FROM claimInfo WHERE lossDate BETWEEN ? AND ?");
-			dateRange.setTimestamp(1,toTimeStamp(start_date));
-			dateRange.setTimestamp(2,toTimeStamp(end_date));
+			dateRange.setTimestamp(1,Utils.toTimeStamp(start_date));
+			dateRange.setTimestamp(2,Utils.toTimeStamp(end_date));
 
 			ResultSet rs = dateRange.executeQuery();
 			if (!rs.isBeforeFirst() ) {    
 				return Response.status(404).entity("No matching claim found").build();
 			}
-			output = resultSetToHtml(rs);
+			output = Utils.resultSetToJaxb(rs);
 			dateRange.close();         
 			return Response.status(200).entity(output).build();
 		} catch (SQLException e) {
@@ -184,7 +204,7 @@ public class ClaimService {
 			if (!rs.isBeforeFirst() ) {    
 				return "No matching claim found";
 			}
-			claimToDelete += resultSetToHtml(rs);
+			claimToDelete += Utils.resultSetToJaxb(rs);
 			readClaim.close();
 			deleteClaim= conn.prepareStatement("Delete From ClaimInfo where ClaimNumber = ? and ClaimantFirstName = ?");
 			deleteClaim.setString(1, claimNumber);
@@ -225,7 +245,7 @@ public class ClaimService {
 			if (!rs.isBeforeFirst() ) {    
 				return "No matching claim found";
 			}
-			output = resultSetToHtml(rs);
+			output = Utils.resultSetToJaxb(rs);
 			readStatment.close();            
 			return output;
 		}
@@ -287,14 +307,14 @@ public class ClaimService {
 			else{
 				insertClaimInfo.setString(4, mct.getStatus().toString());
 			}
-			insertClaimInfo.setTimestamp(5, toTimeStamp(mct.getLossDate()));
+			insertClaimInfo.setTimestamp(5, Utils.toTimeStamp(mct.getLossDate()));
 			if(mct.getLossInfo().getCauseOfLoss() == null){
 				insertClaimInfo.setString(6, null);
 			}
 			else{
-				insertClaimInfo.setString(6, toLowercase(mct.getLossInfo().getCauseOfLoss().toString()));
+				insertClaimInfo.setString(6, Utils.toLowercase(mct.getLossInfo().getCauseOfLoss().toString()));
 			}
-			insertClaimInfo.setTimestamp(7, toTimeStamp(mct.getLossInfo().getReportedDate()));
+			insertClaimInfo.setTimestamp(7, Utils.toTimeStamp(mct.getLossInfo().getReportedDate()));
 			insertClaimInfo.setString(8, mct.getLossInfo().getLossDescription());	
 			if(mct.getAssignedAdjusterID() == null){
 				insertClaimInfo.setString(9, null);
@@ -342,7 +362,7 @@ public class ClaimService {
 				insertVehicleInfo.setString(6, vit.getVin());
 				insertVehicleInfo.setString(7, vit.getLicPlate());
 				insertVehicleInfo.setString(8, vit.getLicPlateState());
-				insertVehicleInfo.setTimestamp(9, toTimeStamp(vit.getLicPlateExpDate()));
+				insertVehicleInfo.setTimestamp(9, Utils.toTimeStamp(vit.getLicPlateExpDate()));
 				insertVehicleInfo.setString(10, vit.getDamageDescription());
 
 
@@ -362,71 +382,5 @@ public class ClaimService {
 			}
 		}
 		return returnValue;
-	}
-
-	public static String resultSetToHtml(ResultSet rs) throws SQLException, DatatypeConfigurationException, TransformerException{
-		String output ="";
-		while(rs.next()){
-
-			MitchellClaimType mct = new MitchellClaimType();
-			LossInfoType lit = new LossInfoType();
-
-			mct.setClaimNumber(rs.getString("claimNumber"));
-			mct.setClaimantFirstName(rs.getString("claimantFirstName"));
-			mct.setClaimantLastName(rs.getString("claimantLastName"));
-			mct.setStatus(StatusCode.fromValue(rs.getString("status")));
-			mct.setLossDate(toXMLCalender(rs.getDate("lossDate")));
-			lit.setCauseOfLoss(CauseOfLossCode.fromValue(rs.getString("causeOfLoss")));
-			lit.setReportedDate(toXMLCalender(rs.getDate("reportedDate")));
-			lit.setLossDescription(rs.getString("lossDescription"));
-			mct.setAssignedAdjusterID(rs.getLong("adjusterID"));
-			mct.setLossInfo(lit);
-			output += (new Marshall().jaxbObjToHTML(mct));
-		}
-		return output;
-	}
-
-	public static Timestamp toTimeStamp(String s) throws ParseException{
-		java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-		Date date = sdf.parse(s);	
-		Timestamp timestamp = new java.sql.Timestamp(date.getTime());
-		return timestamp;
-	}
-
-	public static Timestamp toTimeStamp(XMLGregorianCalendar xgc){
-		java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-		String convertedTimeStamp = sdf.format(xgc.toGregorianCalendar().getTime()); 
-		return java.sql.Timestamp.valueOf(convertedTimeStamp);
-	}
-
-	public static XMLGregorianCalendar toXMLCalender(Date date) throws DatatypeConfigurationException{
-		GregorianCalendar gc = new GregorianCalendar();
-		gc.setTime(date);
-		XMLGregorianCalendar xgc = DatatypeFactory.newInstance().newXMLGregorianCalendar(gc);
-		return xgc;
-	}
-	public static String toLowercase(String str)
-	{
-		String firstLetter = str.substring(0,1).toUpperCase();
-		String restLetters = str.substring(1).toLowerCase();
-		return firstLetter + restLetters;
-	}
-
-	public static boolean validateAgainstXSD(InputStream xml)
-	{
-		try
-		{   
-			StreamSource xsd = new StreamSource( ClaimService.class.getClassLoader().getResourceAsStream("/MitchellClaim.xsd"));
-			SchemaFactory factory =  SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-			Schema schema = factory.newSchema(xsd);
-			Validator validator = schema.newValidator();
-			validator.validate(new StreamSource(xml));
-			return true;
-		}
-		catch(Exception ex)
-		{
-			ex.printStackTrace();
-			return false;
-		}
 	}
 }
