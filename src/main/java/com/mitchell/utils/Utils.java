@@ -27,15 +27,12 @@ import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 import javax.xml.validation.Validator;
 
-import org.w3c.dom.ls.LSInput;
-import org.w3c.dom.ls.LSResourceResolver;
-
 import com.mitchell.claim.rest.ClaimService;
 import com.mitchell.jaxb.CauseOfLossCode;
 import com.mitchell.jaxb.LossInfoType;
 import com.mitchell.jaxb.MitchellClaimType;
 import com.mitchell.jaxb.StatusCode;
-import com.sun.org.apache.xerces.internal.impl.dtd.models.CMStateSet;
+
 
 public class Utils {
 
@@ -58,7 +55,7 @@ public class Utils {
 		XMLGregorianCalendar xgc = DatatypeFactory.newInstance().newXMLGregorianCalendar(gc);
 		return xgc;
 	}
-	
+
 	public static String toLowercase(String str)
 	{
 		String firstLetter = str.substring(0,1).toUpperCase();
@@ -106,32 +103,32 @@ public class Utils {
 		return output;
 	}
 
-public static String jaxbObjToHTML(MitchellClaimType mct) throws TransformerException{
-		
+	public static String jaxbObjToHTML(MitchellClaimType mct) throws TransformerException{
+
 		String strResult= null;
-	try {
-		
-	 TransformerFactory tf = TransformerFactory.newInstance();
-	 StreamSource xslt = new StreamSource( Utils.class.getClassLoader().getResourceAsStream("stylesheet.xsl"));
-     Transformer transformer = tf.newTransformer(xslt);
+		try {
 
-       // Source
-       JAXBContext jaxc = JAXBContext.newInstance(MitchellClaimType.class);
-       JAXBSource source = new JAXBSource(jaxc, new JAXBElement<MitchellClaimType>(new QName("http://www.mitchell.com/examples/claim","MitchellClaim"), MitchellClaimType.class, mct));
+			TransformerFactory tf = TransformerFactory.newInstance();
+			StreamSource xslt = new StreamSource( Utils.class.getClassLoader().getResourceAsStream("stylesheet.xsl"));
+			Transformer transformer = tf.newTransformer(xslt);
 
-       // Result
-       StringWriter writer = new StringWriter();
-       StreamResult result = new StreamResult(writer);
-      
-       // Transform
-       transformer.transform(source, result);  
-       strResult = writer.toString();
-       return strResult;
-	      } catch (JAXBException e) {
-		e.printStackTrace();
-	      }
-       return "Error Parsing To HTML";
+			// Source
+			JAXBContext jaxc = JAXBContext.newInstance(MitchellClaimType.class);
+			JAXBSource source = new JAXBSource(jaxc, new JAXBElement<MitchellClaimType>(new QName("http://www.mitchell.com/examples/claim","MitchellClaim"), MitchellClaimType.class, mct));
+
+			// Result
+			StringWriter writer = new StringWriter();
+			StreamResult result = new StreamResult(writer);
+
+			// Transform
+			transformer.transform(source, result);  
+			strResult = writer.toString();
+			return strResult;
+		} catch (JAXBException e) {
+			e.printStackTrace();
+		}
+		return "Error Parsing To HTML";
 	}
-	
-	
+
+
 }

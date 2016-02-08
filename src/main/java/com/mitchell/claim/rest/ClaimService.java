@@ -2,9 +2,6 @@ package com.mitchell.claim.rest;
 
 import java.io.*;
 import java.sql.*;
-import java.text.ParseException;
-import java.util.Date;
-import java.util.GregorianCalendar;
 import java.util.List;
 
 import javax.ws.rs.Consumes;
@@ -18,35 +15,10 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import javax.xml.XMLConstants;
-import javax.xml.bind.JAXB;
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBElement;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.util.JAXBSource;
-import javax.xml.datatype.DatatypeConfigurationException;
-import javax.xml.datatype.DatatypeFactory;
-import javax.xml.datatype.XMLGregorianCalendar;
-import javax.xml.namespace.QName;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
-import javax.xml.validation.Schema;
-import javax.xml.validation.SchemaFactory;
-import javax.xml.validation.Validator;
-
-import org.xml.sax.SAXParseException;
-
-import sun.nio.cs.StandardCharsets;
 
 import com.mitchell.dao.ClaimServiceDB;
-import com.mitchell.jaxb.CauseOfLossCode;
-import com.mitchell.jaxb.LossInfoType;
 import com.mitchell.jaxb.MitchellClaimList;
 import com.mitchell.jaxb.MitchellClaimType;
-import com.mitchell.jaxb.StatusCode;
 import com.mitchell.jaxb.VehicleInfoType;
 import com.mitchell.utils.Utils;
 import com.sun.jersey.core.header.FormDataContentDisposition;
@@ -55,11 +27,13 @@ import com.sun.jersey.multipart.FormDataParam;
 
 @Path("/claim")
 public class ClaimService {
+
+
+
 	/**
-	 * Upload a File
-	 * @throws SQLException 
-	 * @throws FileNotFoundException 
-	 * @throws Exception 
+	 * This method is called when the user uploads the XML file and clicks Submit
+	 * The method will submit the record if the claimNumber is not already saved in database 
+	 * Otherwise the User will be prompted to update the claim
 	 */
 	@POST
 	@Path("/create")
@@ -71,6 +45,7 @@ public class ClaimService {
 		MitchellClaimType mct = null;
 		MitchellClaimList mcl = null;
 
+		//Store InputStream in string for multiple use
 		InputStream in = fileInputStream;
 		StringBuilder sb=new StringBuilder();
 		BufferedReader br = new BufferedReader(new InputStreamReader(in));
@@ -83,16 +58,20 @@ public class ClaimService {
 		read = sb.toString();
 		InputStream is = new ByteArrayInputStream(read.getBytes("UTF-8"));
 
-		//Validate input XML File
+		//Validate input XML File againt given MitchellClaim.xsl
 		if(!Utils.validateAgainstXSD(is)){
 			return Response.status(415).entity("Invalid XML File").build();
 		}
+		
 		InputStream is2 = new ByteArrayInputStream(read.getBytes("UTF-8"));
+		
 		mcl = new MitchellClaimList();
 		mcl.setMitchellClaimList(is2);
-
 		mct = mcl.getLastMitchellClaimType();
-
+		
+		
+	// Following two methods are not valid anymore as we now validating the xml against xsl	
+	/*	
 		if(mct.getClaimNumber()== null ){
 			mcl.deleteLastMitchellClaimType();
 			return Response.status(400).entity("Error: Claim without Claim Number is invalid").build();
@@ -102,7 +81,8 @@ public class ClaimService {
 			mcl.deleteLastMitchellClaimType();
 			return Response.status(400).entity("Error: No Vehicle Info In Claim").build();
 		}
-
+  */
+		
 		if(!duplicateRecordExists(mct)){
 			if( insertClaimInfo(mct) && insertVehicleInfo(mct)){
 				output = "Claim Created";	
@@ -113,8 +93,56 @@ public class ClaimService {
 		}
 		return Response.status(200).entity(output).build();
 	}
+	
 
+	/**
+	 * The method is called whenever the request to read a claim is made 
+	 * 
+	 * @param parameter
+	 * @param value
+	 * @return
+	 * @throws SQLException
+	 */
+	@Path("/read/{parameter}")
+	@GET
+	@Produces(MediaType.TEXT_HTML)
+	public String readClaimInfo(@PathParam("parameter") String parameter,
+			@DefaultValue("") @QueryParam("value") String value) throws SQLException {
+		PreparedStatement readStatment = null;
+		Connection conn = null;
+		String output = null;
+		if(!(parameter.equalsIgnoreCase("claimNumber") || parameter.equalsIgnoreCase("claimantFirstName") || parameter.equalsIgnoreCase("claimantLastName")
+				|| parameter.equalsIgnoreCase("status") || parameter.equalsIgnoreCase("causeofloss") || parameter.equalsIgnoreCase("adjusterId"))){
+			return "<br>Invalid Parameter </br> <br> Please input either ClamNumber, ClaimantFirstName, ClaimantLastName, Status, CauseOfLoss, AdjusterId";
+		}
+		try {
+			Class.forName("com.mysql.jdbc.Driver");
+			conn = ClaimServiceDB.claimServiceDS().getConnection();
+			readStatment = conn.prepareStatement("select * from ClaimInfo where "+parameter+" = ?");
+			readStatment.setString(1, value);
+			ResultSet rs = readStatment.executeQuery();
+			if (!rs.isBeforeFirst() ) {    
+				return "No matching claim found";
+			}
+			output = Utils.resultSetToJaxb(rs);
+			readStatment.close();            
+			return output;
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			return "Probelm Occured While Reading Data";
+		}
+		finally{
+			if (conn != null) conn.close();
+		}        
+	}
 
+	
+	/**
+	 * This method is called when the User clicks "Yes" to update the claim
+	 * @return
+	 * @throws Exception
+	 */
 	@Path("/update")
 	@POST
 	public String updateCliam() throws Exception{
@@ -124,8 +152,6 @@ public class ClaimService {
 		String output = null;
 		MitchellClaimList mcl = new MitchellClaimList();
 		MitchellClaimType mct = mcl.getLastMitchellClaimType();
-		System.out.println(mct.getAssignedAdjusterID());
-		System.out.println(mct.getClaimantLastName());
 		try {
 			Class.forName("com.mysql.jdbc.Driver");
 			conn = ClaimServiceDB.claimServiceDS().getConnection();
@@ -154,35 +180,14 @@ public class ClaimService {
 		return output;
 	} 
 
-	@Path("/dateRange")
-	@POST
-	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-	public Response findClaimWithinDateRange(@FormParam("start_date") String start_date,
-			@FormParam("end_date") String end_date) throws Exception{
-
-		PreparedStatement dateRange = null;
-		Connection conn = null;
-		String output = null;
-		try {
-			Class.forName("com.mysql.jdbc.Driver");
-			conn = ClaimServiceDB.claimServiceDS().getConnection();
-			dateRange = conn.prepareStatement
-					("SELECT * FROM claimInfo WHERE lossDate BETWEEN ? AND ?");
-			dateRange.setTimestamp(1,Utils.toTimeStamp(start_date));
-			dateRange.setTimestamp(2,Utils.toTimeStamp(end_date));
-
-			ResultSet rs = dateRange.executeQuery();
-			if (!rs.isBeforeFirst() ) {    
-				return Response.status(404).entity("No matching claim found").build();
-			}
-			output = Utils.resultSetToJaxb(rs);
-			dateRange.close();         
-			return Response.status(200).entity(output).build();
-		} catch (SQLException e) {
-			e.printStackTrace();
-			return Response.status(404).build();
-		}
-	} 
+	
+	/**
+	 * In order to delete a claim, values for two parameters is required and this method then delete the particular claim if it founds any
+	 * @param claimNumber
+	 * @param claimantFirstName
+	 * @return
+	 * @throws Exception
+	 */
 
 	@Path("/delete")
 	@POST
@@ -222,49 +227,77 @@ public class ClaimService {
 			if(conn != null)conn.close();
 		}	
 	}
+	
+	
+	/**
+	 * The method returns all the claims whose LossDate fall under the user inputed Date range
+	 * @param start_date
+	 * @param end_date
+	 * @return
+	 * @throws Exception
+	 */
+	@Path("/dateRange")
+	@POST
+	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+	public Response findClaimWithinDateRange(@FormParam("start_date") String start_date,
+			@FormParam("end_date") String end_date) throws Exception{
 
-
-	@Path("/read/{parameter}")
-	@GET
-	@Produces(MediaType.TEXT_HTML)
-	public String readClaimInfo(@PathParam("parameter") String parameter,
-			@DefaultValue("") @QueryParam("value") String value) throws SQLException {
-		PreparedStatement readStatment = null;
+		PreparedStatement dateRange = null;
 		Connection conn = null;
 		String output = null;
-		if(!(parameter.equalsIgnoreCase("claimNumber") || parameter.equalsIgnoreCase("claimantFirstName") || parameter.equalsIgnoreCase("claimantLastName")
-				|| parameter.equalsIgnoreCase("status"))){
-			return "<br>Invalid Parameter </br> <br> Please input either ClamNumber, ClaimantFirstName, ClaimantLastName, Status, CauseOfLoss, AdjusterId";
-		}
 		try {
 			Class.forName("com.mysql.jdbc.Driver");
 			conn = ClaimServiceDB.claimServiceDS().getConnection();
-			readStatment = conn.prepareStatement("select * from ClaimInfo where "+parameter+" = ?");
-			readStatment.setString(1, value);
-			ResultSet rs = readStatment.executeQuery();
+			dateRange = conn.prepareStatement
+					("SELECT * FROM claimInfo WHERE lossDate BETWEEN ? AND ?");
+			try{
+			dateRange.setTimestamp(1,Utils.toTimeStamp(start_date));
+			dateRange.setTimestamp(2,Utils.toTimeStamp(end_date));
+			}
+			catch(Exception InvalidDateFormat){
+				InvalidDateFormat.printStackTrace();
+				return Response.status(400).entity("Incorrect Date Format: valid Format is yyyy-mm-dd HH:mm:ss").build();
+			}
+
+			ResultSet rs = dateRange.executeQuery();
 			if (!rs.isBeforeFirst() ) {    
-				return "No matching claim found";
+				return Response.status(404).entity("No matching claim found").build();
 			}
 			output = Utils.resultSetToJaxb(rs);
-			readStatment.close();            
-			return output;
-		}
-		catch (Exception e) {
+			dateRange.close();         
+			return Response.status(200).entity(output).build();
+		} catch (SQLException e) {
 			e.printStackTrace();
-			return "Probelm Occured While Reading Data";
+			return Response.status(404).build();
 		}
-		finally{
-			if (conn != null) conn.close();
-		}        
-	}
+	} 
+	
 
+	/**
+	 * If the user click "No" to update the claim, then this method will be called to delete the MitchellClaimType object that was just created
+	 * 
+	 * @throws Exception
+	 */
+	@Path("/deleteMCTObject")
+	@POST
+	public void deleteMCTObject() {
 
+		MitchellClaimList mcl = new MitchellClaimList();
+		mcl.deleteLastMitchellClaimType();
+	} 
+	
+
+	/**
+	 * This method will be call from createClaim() method and checks that the submitted claim exists in the database or not
+	 * @param mct
+	 * @return
+	 * @throws Exception
+	 */
 	private boolean duplicateRecordExists(MitchellClaimType mct) throws Exception{
 
 		Boolean claimExists = false;
 		PreparedStatement checkDuplicateRecord = null;
 		Connection conn = null;
-		System.out.println(mct.getClaimNumber());
 		try {
 			Class.forName("com.mysql.jdbc.Driver");
 			conn = ClaimServiceDB.claimServiceDS().getConnection();
@@ -283,8 +316,15 @@ public class ClaimService {
 			if (conn != null) conn.close();
 		}
 		return claimExists;
+		
+		
 	}
-
+	/**
+	 * The method will be called from createClaim() to update the ClaimInfo Table in database
+	 * @param mct
+	 * @return
+	 * @throws SQLException
+	 */
 	private boolean insertClaimInfo(MitchellClaimType mct) throws SQLException{
 
 		PreparedStatement insertClaimInfo = null;
@@ -334,9 +374,16 @@ public class ClaimService {
 			if (conn != null) conn.close();
 		}
 		return returnValue;
+		
+		
 	}
-
-	public boolean insertVehicleInfo(MitchellClaimType mct) throws SQLException{
+	/**
+	 * The method will be called from createClaim() to update the VehicleInfo Table in database
+	 * @param mct
+	 * @return
+	 * @throws SQLException
+	 */
+	private boolean insertVehicleInfo(MitchellClaimType mct) throws SQLException{
 
 		PreparedStatement insertVehicleInfo = null;
 		Connection conn = null;
